@@ -29,3 +29,11 @@ sudo apt update
 sudo apt install curl jq wl-clipboard zenity
 
 sudo apt install jq
+
+
+
+Switching languages: If you ever need to translate from Arabic to English, you can simply create a second script file and change the phrase "Translate to Arabic" to "Translate to English."
+
+Updating models: Since the world of artificial intelligence is constantly evolving, you can always load newer models using `ollam` and change their name on the first line of the script.
+
+Shortcuts: Make sure you memorize your keyboard shortcuts; they will save you hours of copying and pasting in browsers.
