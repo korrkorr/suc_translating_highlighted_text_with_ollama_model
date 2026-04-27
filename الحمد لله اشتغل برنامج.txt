@@ -1,0 +1,970 @@
+
+
+
+الحمد لله
+اشتغل
+برنامج بنموذج اولاما يترجم اى نص تم تظليله
+ف المتصفح والكتب
+
+program for translating highlighted text with ollama model
+
+
+
+
+sudo apt update
+sudo apt install curl jq wl-clipboard zenity
+
+
+
+nano ~/ollama_translate.sh
+
+chmod +x ~/ollama_translate.sh
+sudo apt install jq
+
+الخطوة الثانية: ربط السكربت باختصار لوحة مفاتيح (Keyboard Shortcut)
+
+لترجمة أي نص تظلله بضغطة زر واحدة:
+
+    افتح Settings (الإعدادات) في أوبنتو.
+
+    اذهب إلى Keyboard -> Keyboard Shortcuts -> View and Customise Shortcuts.
+
+    انزل للأسفل واختر Custom Shortcuts.
+
+    اضغط على علامة (+) لإضافة اختصار جديد:
+
+        Name: Ollama Translate
+
+        Command: اكتب المسار الكامل للملف (استبدل username باسم مستخدم جهازك):
+        /home/username/ollama_translate.sh
+
+        Shortcut: اختر الاختصار الذي تفضله (مثلاً Ctrl + Alt + T أو Super + T).
+        
+        
+        username=????????
+        Ctrl + Alt + G=????????
+
+
+
+
+
+
+
+
+
+
+
+
+###############################################################################
+
+
+#!/bin/bash
+
+# 1. الإعدادات
+MODEL="translategemma:12b"
+
+# 2. جلب النص المظلل (دعم كامل لـ Wayland و X11)
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    TEXT=$(wl-paste --primary 2>/dev/null || wl-paste)
+else
+    TEXT=$(xclip -o)
+fi
+
+# إذا كان النص فارغاً
+if [ -z "$TEXT" ]; then
+    notify-send "Ollama" "لم يتم تظليل أي نص!"
+    exit 1
+fi
+
+# 3. بناء الطلب بصيغة JSON صحيحة 100% باستخدام jq
+# هذه الطريقة تعالج علامات التنصيص والرموز الغريبة تلقائياً
+PAYLOAD=$(jq -n \
+    --arg md "$MODEL" \
+    --arg pr "Translate the following text to Arabic. Output only the translation. \n\nText: $TEXT" \
+    '{model: $md, prompt: $pr, stream: false, options: {temperature: 0.2}}')
+
+# 4. إرسال الطلب وحفظ الرد الكامل في متغير
+RESPONSE_RAW=$(curl -s -X POST http://127.0.0.1:11434/api/generate -d "$PAYLOAD")
+
+# 5. استخراج الترجمة أو الخطأ
+TRANSLATION=$(echo "$RESPONSE_RAW" | jq -r '.response // empty')
+ERROR_MSG=$(echo "$RESPONSE_RAW" | jq -r '.error // empty')
+
+# 6. العرض النهائي
+if [ -n "$TRANSLATION" ]; then
+    # عرض الترجمة في نافذة
+    echo -e "الترجمة (بواسطة $MODEL):\n\n$TRANSLATION" | zenity --text-info --title="Ollama Translate" --width=700 --height=500 --font="Ubuntu 14"
+elif [ -n "$ERROR_MSG" ]; then
+    zenity --error --text="خطأ من Ollama: $ERROR_MSG"
+else
+    # إذا كان الرد فارغاً تماماً، نعرض الرد الخام للتشخيص
+    zenity --error --text="رد غير معروف. تأكد أن الموديل $MODEL محمل.\n\nالرد الخام: $RESPONSE_RAW"
+fi
+
+################################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+https://aistudio.google.com/prompts/new_chat
+
+
+
+
+
+
+
+
+ incognito Temporary chat Your conversation won’t be saved automatically
+
+23,146 tokens
+Model 2:31 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+للقيام بذلك على أوبنتو 24.04، سنقوم بإنشاء "سكربت" (Script) بسيط بلغة Bash، يقرأ النص المظلل، يرسله إلى Ollama للترجمة، ثم يعرض النتيجة في نافذة منبثقة.
+
+سأستخدم أدوات قياسية في أوبنتو مثل xclip أو wl-clipboard و zenity.
+المتطلبات الأساسية
+
+يجب التأكد من تثبيت الأدوات التالية:
+
+    Ollama: شغال على جهازك.
+
+    أدوات المساعدة: افتح Terminal ونفذ الأمر التالي:
+    code Bash
+
+    sudo apt update
+    sudo apt install curl jq wl-clipboard zenity
+
+الخطوة الأولى: إنشاء سكربت الترجمة
+
+    افتح محرّر النصوص وأنشئ ملفاً جديداً باسم ollama_translate.sh في مجلد الـ Home الخاص بك:
+    code Bash
+
+    nano ~/ollama_translate.sh
+
+    انسخ الكود التالي وضعه داخل الملف:
+
+code Bash
+
+#!/bin/bash
+
+# 1. الحصول على النص المظلل (يدعم Wayland و X11)
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    TEXT=$(wl-paste --primary)
+    if [ -z "$TEXT" ]; then TEXT=$(wl-paste); fi
+else
+    TEXT=$(xclip -o)
+fi
+
+# التحقق مما إذا كان هناك نص مظلل
+if [ -z "$TEXT" ]; then
+    zenity --error --text="الرجاء تظليل نص أولاً!"
+    exit 1
+fi
+
+# 2. إرسال النص إلى Ollama (نستخدم موديل llama3 كمثال، يمكنك تغييره)
+# تم ضبط البرومبت ليكون مترجماً فقط
+RESPONSE=$(curl -s http://localhost:11434/api/generate -d '{
+  "model": "llama3",
+  "prompt": "Translate the following text to Arabic. Output ONLY the translation and nothing else: '"$TEXT"'",
+  "stream": false
+}' | jq -r '.response')
+
+# 3. عرض النتيجة في نافذة منبثقة بسيطة
+echo "$RESPONSE" | zenity --text-info --title="الترجمة بواسطة Ollama" --width=500 --height=300 --font="Ubuntu 14"
+
+    احفظ الملف (Ctrl+O ثم Enter) واخرج (Ctrl+X).
+
+    أعطِ السكربت صلاحية التنفيذ:
+    code Bash
+
+    chmod +x ~/ollama_translate.sh
+
+الخطوة الثانية: ربط السكربت باختصار لوحة مفاتيح (Keyboard Shortcut)
+
+لترجمة أي نص تظلله بضغطة زر واحدة:
+
+    افتح Settings (الإعدادات) في أوبنتو.
+
+    اذهب إلى Keyboard -> Keyboard Shortcuts -> View and Customise Shortcuts.
+
+    انزل للأسفل واختر Custom Shortcuts.
+
+    اضغط على علامة (+) لإضافة اختصار جديد:
+
+        Name: Ollama Translate
+
+        Command: اكتب المسار الكامل للملف (استبدل username باسم مستخدم جهازك):
+        /home/username/ollama_translate.sh
+
+        Shortcut: اختر الاختصار الذي تفضله (مثلاً Ctrl + Alt + T أو Super + T).
+
+الخطوة الثالثة: التجربة
+
+    تأكد أن Ollama يعمل (ollama serve).
+
+    تأكد أنك قمت بتحميل الموديل المستخدم (مثلاً ollama pull llama3).
+
+    اذهب إلى أي متصفح أو محرر نصوص، ظلل أي نص إنجليزي.
+
+    اضغط على اختصار لوحة المفاتيح الذي اخترته.
+
+    ستظهر لك نافذة "Zenity" تحتوي على الترجمة العربية.
+
+ملاحظات إضافية:
+
+    تغيير اللغة: إذا أردت الترجمة من العربية للإنجليزية، يمكنك إنشاء سكربت آخر وتعديل جملة الـ Prompt داخل الكود إلى Translate to English.
+
+    الموديل: استخدمت llama3 في السكربت لأنه سريع وقوي، ولكن يمكنك استبداله بـ mistral أو أي موديل آخر تملكه.
+
+    بيئة العمل: أوبنتو 24.04 يستخدم Wayland افتراضياً، لذلك استخدمنا wl-paste في السكربت لضمان عمله بشكل صحيح.
+
+10s
+User 2:33 AM
+
+iعدل لاختيار نموذج او لكتابة اسم النموذج اللذى يعمل من خلال اولاما مثل
+translategemma:12b
+Model 2:33 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+لتعديل السكربت بحيث يمكنك اختيار النموذج بسهولة، أو حتى جعل السكربت يسألك عن النموذج الذي تريد استخدامه من قائمة الموديلات المثبتة لديك بالفعل في Ollama، سنقوم بتحديث الكود.
+
+سأعطيك خيارين:
+
+    الخيار الأول: تحديد اسم موديل ثابت (مثل translategemma:12b).
+
+    الخيار الثاني (الأفضل): سكربت ذكي يظهر لك قائمة بالموديلات الموجودة على جهازك لتختار منها.
+
+الكود المحدث (الخيار الذكي - يتيح لك الاختيار)
+
+قم بتعديل ملف ~/ollama_translate.sh ووضع هذا الكود بدلاً من القديم:
+code Bash
+
+#!/bin/bash
+
+# 1. تحديد النموذج الافتراضي (يمكنك تغييره هنا)
+# إذا أردت استخدامه مباشرة دون سؤال، اجعل القيمة ثابتة
+DEFAULT_MODEL="translategemma:12b"
+
+# 2. الحصول على النص المظلل
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    TEXT=$(wl-paste --primary)
+    if [ -z "$TEXT" ]; then TEXT=$(wl-paste); fi
+else
+    TEXT=$(xclip -o)
+fi
+
+if [ -z "$TEXT" ]; then
+    zenity --error --text="الرجاء تظليل نص أولاً!" --title="خطأ"
+    exit 1
+fi
+
+# 3. جلب قائمة الموديلات المثبتة في Ollama (اختياري: إذا أردت اختيار موديل مختلف كل مرة)
+# إذا كنت تريد استخدام الموديل الثابت دائماً، ابقِ السطر التالي معلقاً (#)
+SELECTED_MODEL=$(ollama list | awk '{if(NR>1) print $1}' | zenity --list --title="اختر نموذج الترجمة" --column="الموديلات المتوفرة" --default-value="$DEFAULT_MODEL")
+
+# إذا لم يتم اختيار موديل (إغلاق النافذة)، استخدم الافتراضي
+if [ -z "$SELECTED_MODEL" ]; then
+    SELECTED_MODEL=$DEFAULT_MODEL
+fi
+
+# 4. إرسال النص إلى Ollama
+# ملاحظة: تم تحسين البرومبت ليتناسب مع نماذج الترجمة المتخصصة
+RESPONSE=$(curl -s http://localhost:11434/api/generate -d '{
+  "model": "'"$SELECTED_MODEL"'",
+  "prompt": "Translate the following text to Arabic. Return only the translation:\n\n'"$TEXT"'",
+  "stream": false
+}' | jq -r '.response')
+
+# 5. عرض النتيجة
+if [ -z "$RESPONSE" ] || [ "$RESPONSE" == "null" ]; then
+    zenity --error --text="فشل الاتصال بـ Ollama أو النموذج غير موجود."
+else
+    echo "$RESPONSE" | zenity --text-info --title="الترجمة بواسطة $SELECTED_MODEL" --width=600 --height=400 --font="Ubuntu 14" --editable
+fi
+
+شرح التعديلات الجديدة:
+
+    ollama list | awk ...: هذا الجزء يقوم بسحب أسماء الموديلات الموجودة على جهازك فعلياً ويعرضها لك في قائمة لتختار منها.
+
+    zenity --list: تفتح نافذة لتختار الموديل (مثل translategemma:12b أو llama3).
+
+    تخصيص الموديل: إذا كنت قد قمت بتحميل translategemma:12b مسبقاً عبر أمر ollama pull translategemma:12b سيظهر لك في القائمة.
+
+    المرونة: إذا ضغطت Cancel في نافذة اختيار الموديل، سيستخدم السكربت الموديل الافتراضي الذي حددته في أول الكود.
+
+كيف تجعل السكربت يترجم "مباشرة" بموديل محدد؟
+
+إذا كنت لا تريد أن تظهر قائمة الاختيار وتريد استهداف translategemma:12b دائماً وبسرعة، قم بتعديل الجزء رقم 3 في الكود ليصبح هكذا فقط:
+code Bash
+
+SELECTED_MODEL="translategemma:12b"
+
+ملاحظة لمستخدمي أوبنتو 24.04:
+
+تأكد من أن أداة jq مثبتة لأنها المسؤولة عن معالجة رد Ollama:
+code Bash
+
+sudo apt install jq
+
+الآن عند تظليل نص والضغط على الاختصار، سيظهر لك مربع يطلب منك اختيار المحرك (الموديل)، وبمجرد الاختيار ستظهر الترجمة فوراً.
+Model 2:42 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+في محرر nano، لا يوجد أمر واحد مباشر مثل (Delete All)، ولكن هناك طريقتان سهلتان جداً لمسح كل شيء:
+الطريقة الأولى: من داخل nano (باستخدام اختصارات الكيبورد)
+
+    ارفع المؤشر إلى أول سطر في الملف.
+
+    اضغط على Alt + A (لتفعيل وضع التحديد/المارك). ستلاحظ ظهور كلمة Mark Set في الأسفل.
+
+    اضغط على Alt + / (لينتقل المؤشر فوراً إلى آخر سطر في الملف ويقوم بتظليل كل النص).
+
+    اضغط على Ctrl + K (للقص/الحذف). سيتم مسح كل النص المظلل فوراً.
+
+الطريقة الثانية: من خارج nano (الأسرع والأسهل)
+
+إذا كنت تريد مسح محتوى الملف تماماً قبل فتحه، نفذ هذا الأمر في الـ Terminal:
+code Bash
+
+> ~/ollama_translate.sh
+
+(علامة "أكبر من" متبوعة باسم الملف ستقوم بتفريغه تماماً من أي نص).
+
+بعد ذلك افتحه لتجد صفحة بيضاء:
+code Bash
+
+nano ~/ollama_translate.sh
+
+الطريقة الثالثة (يدوية سريعة):
+
+إذا كان الملف صغيراً، يمكنك ببساطة الاستمرار في الضغط على Ctrl + K، حيث يقوم هذا الاختصار بحذف سطر كامل في كل مرة تضغط فيها عليه. اطلب الاستمرار في الضغط حتى يفرغ الملف.
+
+بعد الحذف:
+يمكنك الآن لصق الكود الجديد (بواسطة Shift + Ctrl + V أو زر الفأرة الأيمن -> Paste)، ثم الحفظ (Ctrl + O ثم Enter) والخروج (Ctrl + X).
+Model 2:48 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+من الصورة التي أرفقتها، هناك خطأ شائع جداً وهو سبب المشكلة:
+
+في خانة Command، مكتوب: /home/username/ollama_translate.sh.
+كلمة username هي مجرد "اسم مستعار" (Placeholder)، ويجب عليك استبدالها بـ اسم المستخدم الخاص بك على جهازك.
+حل المشكلة في خطوات بسيطة:
+1. معرفة اسم المستخدم الخاص بك:
+
+افتح الـ Terminal واكتب الأمر التالي:
+code Bash
+
+whoami
+
+سيظهر لك اسم مستخدم جهازك (مثلاً: mohamed أو ali).
+2. تعديل مسار الأمر (Command):
+
+ارجع إلى شاشة الإعدادات (التي في الصورة) وغيّر السطر المكتوب في خانة Command ليكون كالتالي (مع استبدال YOUR_NAME بالاسم الذي ظهر لك في الخطوة السابقة):
+code Text
+
+/home/YOUR_NAME/ollama_translate.sh
+
+أو يمكنك استخدام هذا المسار المختصر (غالباً ما يعمل):
+code Text
+
+bash -c "/home/$USER/ollama_translate.sh"
+
+3. حل تعارض الاختصار (نقطة مهمة جداً):
+
+الاختصار Ctrl + Alt + T محجوز افتراضياً في أوبنتو لفتح الـ Terminal.
+لذلك عند ضغطه، النظام يحاول فتح التيرمينال ولا ينفذ السكربت الخاص بك.
+أنصحك بتغيير الاختصار إلى شيء آخر مثل:
+
+    Super + T (زر الويندوز + حرف T)
+
+    أو Ctrl + Alt + G
+
+4. التأكد من صلاحيات الملف:
+
+تأكد أنك أعطيت الملف صلاحية التنفيذ من خلال هذا الأمر في الـ Terminal:
+code Bash
+
+chmod +x ~/ollama_translate.sh
+
+كيف تتأكد من أن السكربت يعمل أصلاً؟
+
+قبل تجربة الاختصار، جرب تشغيل السكربت يدوياً من الـ Terminal لترى إن كان هناك خطأ برمجياً:
+
+    ظلل أي نص بالماوس في أي مكان.
+
+    افتح الـ Terminal واكتب:
+    code Bash
+
+    ~/ollama_translate.sh
+
+    إذا ظهرت لك نافذة الترجمة، فالمشكلة كانت فقط في "المسار" أو "الاختصار" في الإعدادات.
+
+    إذا ظهر لك خطأ في الـ Terminal، أخبرني به لأصلحه لك.
+
+ملاحظة أخيرة: تأكد أنك قمت بتثبيت أداة jq لأن السكربت يعتمد عليها:
+code Bash
+
+sudo apt install jq
+
+Model 2:51 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+المشكلة الآن ليست في السيرفر (لأن رسالة "Address already in use" تعني أن Ollama يعمل بالفعل في الخلفية كخدمة للنظام، وهذا ممتاز).
+
+المشكلة على الأرجح في طريقة إرسال النص؛ إذا كان النص المظلل يحتوي على علامات تنصيص " أو أسطر جديدة، فإنه يفسد صيغة الـ JSON المرسلة لـ Ollama، فيرد السيرفر بخطأ ويظهر لك السكربت رسالة "فشل الاتصال".
+
+إليك النسخة المعدلة والاحترافية من السكربت التي تعالج النصوص المعقدة وتستخدم الموديل الخاص بك translategemma:12b:
+السكربت المطور (انسخ هذا الكود بالكامل):
+code Bash
+
+#!/bin/bash
+
+# 1. تحديد النموذج الذي تملكه
+SELECTED_MODEL="translategemma:12b"
+
+# 2. الحصول على النص المظلل
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    TEXT=$(wl-paste --primary)
+    if [ -z "$TEXT" ]; then TEXT=$(wl-paste); fi
+else
+    TEXT=$(xclip -o)
+fi
+
+# التحقق من وجود نص
+if [ -z "$TEXT" ]; then
+    zenity --error --text="الرجاء تظليل نص أولاً!" --title="خطأ"
+    exit 1
+fi
+
+# 3. إرسال النص إلى Ollama بطريقة آمنة (عبر تجميع الـ JSON بواسطة jq)
+# هذه الطريقة تمنع حدوث أخطاء بسبب علامات التنصيص في النص الأصلي
+JSON_DATA=$(jq -n --arg model "$SELECTED_MODEL" --arg prompt "Translate the following text to Arabic. Output only the translation: $TEXT" \
+    '{model: $model, prompt: $prompt, stream: false}')
+
+RESPONSE=$(curl -s -X POST http://localhost:11434/api/generate -d "$JSON_DATA" | jq -r '.response' 2>/dev/null)
+
+# 4. عرض النتيجة
+if [ -z "$RESPONSE" ] || [ "$RESPONSE" == "null" ]; then
+    zenity --error --text="تعذر الحصول على رد من الموديل ($SELECTED_MODEL). تأكد أن Ollama يعمل." --title="خطأ في الاتصال"
+else
+    echo "$RESPONSE" | zenity --text-info --title="الترجمة بواسطة $SELECTED_MODEL" --width=600 --height=400 --font="Ubuntu 14"
+fi
+
+لماذا هذا الإصدار أفضل؟
+
+    استخدام jq لبناء الطلب: بدلاً من كتابة الـ JSON يدوياً، استخدمنا jq لدمج النص المظلل. هذا يضمن أنه حتى لو ظللت نصاً فيه رموز غريبة أو علامات تنصيص، فلن يتعطل السكربت.
+
+    تحديد الموديل مباشرة: قمت بوضع translategemma:12b كاسم أساسي في المتغير SELECTED_MODEL.
+
+    تجاوز مشكلة السيرفر: بما أن ollama serve أعطاك "Address already in use"، فهذا يعني أن السيرفر جاهز تماماً لاستقبال الطلبات على localhost:11434.
+
+خطوات التنفيذ الآن:
+
+    افتح الملف: nano ~/ollama_translate.sh
+
+    امسح كل شيء (كما تعلمنا بـ Ctrl+K مستمر).
+
+    الصق الكود الجديد أعلاه.
+
+    احفظ واخرج (Ctrl+O ثم Enter ثم Ctrl+X).
+
+    جرب الآن من الـ Terminal أولاً لضمان عدم وجود أخطاء:
+
+        ظلل أي نص إنجليزي في المتصفح.
+
+        اكتب في الـ Terminal: bash ~/ollama_translate.sh
+
+    إذا ظهرت نافذة الترجمة بنجاح، فالاختصار (Shortcut) سيعمل معك الآن بكل تأكيد (بشرط أن يكون المسار في الإعدادات صحيحاً كما في الرد السابق).
+
+تنبيه بسيط: موديل translategemma:12b حجمه 8 جيجابايت، قد يستغرق ثانيتين أو ثلاث في أول مرة تشغيل ليتم تحميله في الذاكرة (RAM/VRAM) قبل أن تظهر لك نافذة الترجمة.
+Model 2:55 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+المشكلة في النصوص الكبيرة غالباً ما تكون بسبب "نافذة السياق" (Context Window)، حيث يحدد Ollama افتراضياً عدداً معيناً من التوكنز (غالباً 2048 أو 4096)، وإذا زاد النص عن ذلك قد يتوقف أو يعطي نتائج ناقصة.
+
+سأقوم بتعديل الكود لإضافة إعدادات متقدمة (Options) ترفع سعة الـ Context وتسمح بإنتاج ردود طويلة، مع إضافة تنبيه (Notification) يخبرك بأن الترجمة جارية لأن النصوص الكبيرة تأخذ وقتاً أطول للمعالجة.
+الكود المطور للتعامل مع النصوص الكبيرة:
+code Bash
+
+#!/bin/bash
+
+# 1. الإعدادات
+SELECTED_MODEL="translategemma:12b"
+CONTEXT_SIZE=8192  # حجم الذاكرة لاستيعاب نص كبير (Context Window)
+MAX_PREDICT=4096   # أقصى عدد توكنز للرد (الترجمة)
+
+# 2. الحصول على النص المظلل
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    TEXT=$(wl-paste --primary)
+    if [ -z "$TEXT" ]; then TEXT=$(wl-paste); fi
+else
+    TEXT=$(xclip -o)
+fi
+
+if [ -z "$TEXT" ]; then
+    zenity --error --text="الرجاء تظليل نص أولاً!" --title="خطأ"
+    exit 1
+fi
+
+# 3. إرسال تنبيه بسيط لتعرف أن المعالجة بدأت (مفيد للنصوص الكبيرة)
+notify-send "Ollama" "بدأت عملية ترجمة نص طويل، يرجى الانتظار..." -i accessories-character-map
+
+# 4. تجهيز الطلب بصيغة JSON مع بارامترات الحجم
+# أضفنا num_ctx و num_predict داخل قسم options
+JSON_DATA=$(jq -n \
+  --arg model "$SELECTED_MODEL" \
+  --arg prompt "Translate the following text to Arabic. Maintain the original meaning and formatting. Output ONLY the translation:\n\n$TEXT" \
+  --argctx "$CONTEXT_SIZE" \
+  --argpred "$MAX_PREDICT" \
+  '{
+    model: $model, 
+    prompt: $prompt, 
+    stream: false, 
+    options: {
+      num_ctx: ($argctx | tonumber),
+      num_predict: ($argpred | tonumber),
+      temperature: 0.3
+    }
+  }')
+
+# 5. تنفيذ الطلب
+RESPONSE=$(curl -s -X POST http://localhost:11434/api/generate -d "$JSON_DATA" | jq -r '.response' 2>/dev/null)
+
+# 6. عرض النتيجة
+if [ -z "$RESPONSE" ] || [ "$RESPONSE" == "null" ]; then
+    zenity --error --text="فشل في معالجة النص. قد يكون النص ضخماً جداً أو الموديل توقف."
+else
+    # عرض النتيجة في نافذة قابلة للتمرير والقراءة بشكل مريح
+    echo "$RESPONSE" | zenity --text-info --title="الترجمة بواسطة $SELECTED_MODEL" --width=800 --height=600 --font="Ubuntu 14"
+fi
+
+التغييرات الجوهرية في هذا الكود:
+
+    num_ctx: 8192: قمنا بزيادة حجم "ذاكرة" الموديل. هذا يسمح له بقراءة نصوص طويلة جداً (آلاف الكلمات) دون أن ينسى البداية.
+
+    num_predict: 4096: قمنا بزيادة طول الرد المسموح به، لضمان أن الترجمة لن تنقطع في المنتصف.
+
+    temperature: 0.3: خفضنا درجة "الإبداع" لجعل الموديل أكثر دقة في الترجمة الحرفية والالتزام بالنص.
+
+    notify-send: بما أن الموديل 12b ثقيل ويحتاج وقتاً لترجمة صفحات كاملة، ستظهر لك رسالة صغيرة في أعلى الشاشة بمجرد ضغط الاختصار لتطمئن أن السكربت يعمل.
+
+    توسيع النافذة: جعلت نافذة النتائج (zenity) أكبر (800x600) لتناسب النصوص الطويلة.
+
+ملاحظة هامة للأداء:
+
+بما أنك تستخدم موديل 12b (حجم كبير) وتريد ترجمة نصوص كبيرة، تأكد أن كارت الشاشة (GPU) لديك به ذاكرة (VRAM) كافية (على الأقل 10-12 جيجا بايت). إذا وجدت الجهاز أصبح بطيئاً جداً، يمكنك تقليل num_ctx إلى 4096.
+
+قم بتحديث الملف بنفس الطريقة السابقة وجرب ترجمة فقرات كاملة الآن.
+Model 3:10 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+هذه الرسالة تظهر عندما يفشل curl في الحصول على رد صحيح من Ollama. وبما أنك تترجم نصوصاً كبيرة بموديل 12b، فهناك احتمالان كبيران للمشكلة:
+
+    نقص الذاكرة (VRAM/RAM): الموديل 12b مع سياق (Context) كبير يستهلك ذاكرة هائلة، مما قد يسبب انهيار المحرك (Crash).
+
+    تجاوز حدود حجم الأوامر: عند تمرير نص ضخم جداً داخل متغير في Bash، قد يحدث خطأ في الـ JSON.
+
+    وقت الاستجابة (Timeout): النصوص الكبيرة تأخذ وقتاً طويلاً جداً للمعالجة، وقد تنقطع الصلة قبل انتهاء الموديل.
+
+إليك النسخة النهائية والأكثر استقراراً، حيث سنقوم بإرسال البيانات عبر ملف مؤقت (لتجنب مشاكل حجم النصوص) وسنقلل حجم الذاكرة قليلاً لضمان الاستقرار:
+الكود المستقر (الإصدار الاحترافي):
+code Bash
+
+#!/bin/bash
+
+# 1. الإعدادات
+SELECTED_MODEL="translategemma:12b"
+CONTEXT_SIZE=4096   # تقليلها قليلاً لضمان استقرار الذاكرة
+MAX_PREDICT=2048    # كافية جداً لترجمة عدة صفحات
+
+# 2. الحصول على النص المظلل
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    TEXT=$(wl-paste --primary)
+    if [ -z "$TEXT" ]; then TEXT=$(wl-paste); fi
+else
+    TEXT=$(xclip -o)
+fi
+
+if [ -z "$TEXT" ]; then
+    zenity --error --text="الرجاء تظليل نص أولاً!" --title="خطأ"
+    exit 1
+fi
+
+# 3. إرسال تنبيه
+notify-send "Ollama" "جاري معالجة النص الكبير باستخدام $SELECTED_MODEL..."
+
+# 4. إنشاء ملف JSON مؤقت (هذا يحل مشكلة النصوص الضخمة والرموز الغريبة)
+TMP_JSON=$(mktemp /tmp/ollama_req.XXXXXX.json)
+jq -n \
+  --arg model "$SELECTED_MODEL" \
+  --arg prompt "Translate the following text to Arabic. Output ONLY the translated text:\n\n$TEXT" \
+  --argctx "$CONTEXT_SIZE" \
+  --argpred "$MAX_PREDICT" \
+  '{
+    model: $model, 
+    prompt: $prompt, 
+    stream: false, 
+    options: {
+      num_ctx: ($argctx | tonumber),
+      num_predict: ($argpred | tonumber),
+      temperature: 0.1
+    }
+  }' > "$TMP_JSON"
+
+# 5. تنفيذ الطلب مع زيادة وقت الانتظار (Timeout)
+# استخدمنا --data-binary لإرسال الملف كما هو
+RESPONSE_RAW=$(curl -s -X POST http://localhost:11434/api/generate \
+     --header "Content-Type: application/json" \
+     --data-binary "@$TMP_JSON")
+
+# مسح الملف المؤقت فوراً
+rm "$TMP_JSON"
+
+# 6. استخراج النتيجة
+RESPONSE=$(echo "$RESPONSE_RAW" | jq -r '.response' 2>/dev/null)
+
+# 7. عرض النتيجة أو الخطأ بالتفصيل
+if [ -z "$RESPONSE" ] || [ "$RESPONSE" == "null" ]; then
+    ERROR_MSG=$(echo "$RESPONSE_RAW" | jq -r '.error' 2>/dev/null)
+    zenity --error --text="حدث خطأ: $ERROR_MSG\n\nتأكد من أن كارت الشاشة يتحمل حجم النص أو حاول تظليل جزء أصغر." --title="فشل المعالجة"
+else
+    echo "$RESPONSE" | zenity --text-info --title="الترجمة بواسطة $SELECTED_MODEL" --width=800 --height=600 --font="Ubuntu 14"
+fi
+
+ما الذي تم إصلاحه؟
+
+    استخدام --data-binary "@$TMP_JSON": بدلاً من إرسال النص مباشرة في سطر الأوامر (الذي له حد أقصى في لينكس)، قمنا بكتابة النص في ملف مؤقت في مجلد /tmp/ وأمرنا curl بقراءته. هذا يسمح لك بترجمة كتب كاملة إذا أردت.
+
+    التعامل مع الأخطاء: إذا حدث خطأ من Ollama، السكربت سيقوم الآن بإظهار رسالة الخطأ الحقيقية القادمة من السيرفر (Error Message) بدلاً من رسالة عامة.
+
+    تقليل الـ Temperature: ضبطناها على 0.1 لجعل الموديل أسرع وأكثر دقة في الترجمة.
+
+    الاستقرار: تقليل CONTEXT_SIZE إلى 4096 يوازن بين القدرة على معالجة نصوص طويلة وبين الحفاظ على استقرار كارت الشاشة.
+
+نصيحة إضافية:
+
+إذا استمرت رسالة الخطأ، افتح الـ Terminal واكتب:
+ollama logs
+أو راقب استهلاك الذاكرة عبر أمر nvidia-smi (إذا كان لديك كارت نفيديا) لترى هل تمتلئ الذاكرة وتتسبب في إغلاق الموديل.
+
+قم بتحديث السكربت بهذا الكود، وسيعمل معك حتى مع النصوص الطويلة جداً.
+Model 3:15 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+ما شاء الله، كارت الشاشة لديك RTX 5060 Ti بذاكرة 16 جيجابايت هو وحش حقيقي! الذاكرة لديك فارغة تقريباً (تستخدم 600 ميجا فقط من أصل 16 جيجا)، وهذا يعني أن المشكلة ليست في العتاد مطلقاً، بل غالباً في طريقة معالجة النص الطويل أو "مهلة الانتظار" (Timeout).
+
+بما أنك تترجم نصوصاً كبيرة، الموديل 12b يحتاج وقتاً "للتفكير" قبل البدء في إخراج النص. إذا انقطع الاتصال أو حدث خطأ في تنسيق JSON، تظهر لك الرسالة السابقة.
+
+إليك النسخة "النهائية" المصممة خصيصاً لجهازك القوي، مع رفع الكفاءة لأقصى درجة وإضافة نظام كشف الأخطاء الحقيقي:
+السكربت الاحترافي (إصدار الـ 16 جيجا بايت VRAM):
+code Bash
+
+#!/bin/bash
+
+# 1. إعدادات القوة (تناسب كارت 16 جيجا)
+SELECTED_MODEL="translategemma:12b"
+CONTEXT_SIZE=16384  # رفعنا السياق جداً ليتحمل مقالات كاملة
+MAX_PREDICT=8192    # السماح بردود طويلة جداً
+
+# 2. الحصول على النص المظلل
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    TEXT=$(wl-paste --primary)
+    if [ -z "$TEXT" ]; then TEXT=$(wl-paste); fi
+else
+    TEXT=$(xclip -o)
+fi
+
+if [ -z "$TEXT" ]; then
+    zenity --error --text="الرجاء تظليل نص أولاً!"
+    exit 1
+fi
+
+# 3. إشعار البدء (جهازك قوي لكن النصوص الكبيرة تأخذ وقتاً)
+notify-send -t 5000 "Ollama - مترجم المحترفين" "جاري معالجة نص كبير بموديل $SELECTED_MODEL... يرجى الانتظار"
+
+# 4. إنشاء ملف JSON مؤقت لتجنب مشاكل الرموز
+TMP_JSON=$(mktemp /tmp/ollama_req.XXXXXX.json)
+jq -n \
+  --arg model "$SELECTED_MODEL" \
+  --arg prompt "Task: Translate the following text to Arabic accurately. Maintain the tone and structure. Output ONLY the translation. \n\nText to translate:\n$TEXT" \
+  --argctx "$CONTEXT_SIZE" \
+  --argpred "$MAX_PREDICT" \
+  '{
+    model: $model, 
+    prompt: $prompt, 
+    stream: false, 
+    options: {
+      num_ctx: ($argctx | tonumber),
+      num_predict: ($argpred | tonumber),
+      temperature: 0
+    }
+  }' > "$TMP_JSON"
+
+# 5. تنفيذ الطلب مع رفع مهلة الانتظار (Timeout) إلى 5 دقائق للنصوص الضخمة
+RESPONSE_RAW=$(curl -s -X POST http://localhost:11434/api/generate \
+     --connect-timeout 60 \
+     --max-time 300 \
+     --header "Content-Type: application/json" \
+     --data-binary "@$TMP_JSON")
+
+EXIT_CODE=$?
+rm "$TMP_JSON"
+
+# 6. معالجة النتيجة
+if [ $EXIT_CODE -ne 0 ]; then
+    zenity --error --text="فشل الاتصال بـ Ollama. تأكد أن السيرفر يعمل (Error Code: $EXIT_CODE)"
+    exit 1
+fi
+
+RESPONSE=$(echo "$RESPONSE_RAW" | jq -r '.response' 2>/dev/null)
+
+# 7. عرض النتيجة أو تفاصيل الخطأ
+if [ -z "$RESPONSE" ] || [ "$RESPONSE" == "null" ]; then
+    # محاولة استخراج رسالة الخطأ من Ollama إن وجدت
+    ERR_DETAIL=$(echo "$RESPONSE_RAW" | jq -r '.error' 2>/dev/null)
+    zenity --error --text="الموديل لم يرسل ترجمة. \nالسبب المحتمل: $ERR_DETAIL"
+else
+    # عرض النتيجة في نافذة كبيرة تليق بجهازك
+    echo "$RESPONSE" | zenity --text-info --title="الترجمة بواسطة $SELECTED_MODEL" \
+        --width=900 --height=700 --font="Ubuntu 13" --editable
+fi
+
+لماذا سيعمل هذا السكربت معك الآن؟
+
+    Context Size (16384): بما أن لديك 16 جيجا VRAM، رفعت لك سعة الاستيعاب بشكل كبير جداً لتتمكن من ترجمة صفحات كاملة دفعة واحدة.
+
+    Connect-Timeout: أضفت أمراً لـ curl ليتنظر الموديل حتى لو استغرق وقتاً طويلاً في "تحميل" النص الكبير في الذاكرة.
+
+    Temperature 0: جعلت الموديل "حازماً" ليركز على الترجمة فقط ولا يضيف كلاماً من عنده، مما يوفر في استهلاك التوكنز.
+
+    Error Handling: السكربت الآن سيخبرك (Error Code) إذا كان العطل من الشبكة أو من الموديل نفسه.
+
+نصيحة أخيرة لجهازك الجبار:
+
+بما أنك تملك 16 جيجا VRAM، يمكنك حتى تجربة موديلات أقوى في الترجمة مثل:
+
+    ollama pull command-r (موديل ممتاز جداً في الترجمة والنصوص الطويلة).
+
+    إذا أردت الاستمرار على Gemma فهو ممتاز، لكن تأكد دائماً أنك قمت بعمل ollama pull translategemma:12b بشكل كامل.
+
+قم بتحديث الملف وجرب الآن، سيذهلك الأداء!
+Model 3:16 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+بما أن الخطأ يظهر حتى مع "كلمتين"، فهذا يعني أن المشكلة ليست في قوة كارت الشاشة (لأن كارتك ممتاز)، بل غالباً في تنسيق النص (JSON Formatting) أو أن موديل translategemma بالذات يتطلب إعدادات معينة أو أنه لم يتم تحميله بالكامل.
+
+لنقم الآن بعمل نسخة "صائدة الأخطاء". هذا الكود سيكشف لنا بالضبط أين المشكلة (هل هي في اسم الموديل، أم في الاتصال، أم في النص):
+الكود المعدل (نسخة الإصلاح السريع):
+code Bash
+
+#!/bin/bash
+
+# 1. الموديل (تأكد من كتابة الاسم كما يظهر في ollama list)
+SELECTED_MODEL="translategemma:12b"
+
+# 2. الحصول على النص المظلل
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    TEXT=$(wl-paste --primary)
+    if [ -z "$TEXT" ]; then TEXT=$(wl-paste); fi
+else
+    TEXT=$(xclip -o)
+fi
+
+if [ -z "$TEXT" ]; then
+    zenity --error --text="الرجاء تظليل نص أولاً!"
+    exit 1
+fi
+
+# 3. إرسال الطلب (تبسيط الطلب جداً لاختبار الاتصال)
+# استخدمنا 127.0.0.1 بدلاً من localhost لسرعة الاستجابة
+RESPONSE_RAW=$(curl -s -w "\n%{http_code}" -X POST http://127.0.0.1:11434/api/generate \
+     -d "{
+  \"model\": \"$SELECTED_MODEL\",
+  \"prompt\": \"Translate to Arabic: $TEXT\",
+  \"stream\": false
+}")
+
+# فصل كود الاستجابة عن نص النتيجة
+HTTP_STATUS=$(echo "$RESPONSE_RAW" | tail -n1)
+BODY=$(echo "$RESPONSE_RAW" | sed '$d')
+
+# 4. تحليل المشكلة
+if [ "$HTTP_STATUS" != "200" ]; then
+    zenity --error --text="خطأ في الاتصال بالسيرفر! \nكود الخطأ: $HTTP_STATUS \nتأكد أن Ollama يعمل."
+    exit 1
+fi
+
+RESPONSE=$(echo "$BODY" | jq -r '.response' 2>/dev/null)
+
+if [ -z "$RESPONSE" ] || [ "$RESPONSE" == "null" ]; then
+    # إذا فشل jq في التحليل، نعرض الرد الخام لنعرف السبب
+    zenity --error --text="رد غير متوقع من الموديل. الرد الخام: \n$BODY"
+else
+    # عرض النتيجة
+    echo "$RESPONSE" | zenity --text-info --title="الترجمة" --width=600 --height=400 --font="Ubuntu 14"
+fi
+
+لماذا قد تظهر الرسالة السابقة؟ (أسباب محتملة)
+
+إذا جربت هذا الكود وظهرت لك رسالة خطأ، فإليك الأسباب المحتملة وحلها:
+
+    الموديل غير موجود: تأكد أنك كتبت الاسم بالملّي. جرب تشغيل هذا الأمر في الـ Terminal:
+    ollama run translategemma:12b "Hi"
+    إذا لم يعمل في الـ Terminal، فالخطر في الموديل نفسه (ربما يحتاج إعادة تحميل ollama pull).
+
+    أداة jq: ربما لا تستطيع معالجة الرد. تأكد من تثبيتها:
+    sudo apt install jq
+
+    صيغة JSON: إذا كان النص المظلل يحتوي على علامات تنصيص (") داخل الكلام، فإنها "تكسر" الكود. في الكود الجديد أعلاه، قمت بتبسيط الإرسال.
+
+جرب هذا الآن:
+
+    استبدل الكود في الملف ~/ollama_translate.sh بالكود الجديد أعلاه.
+
+    ظلل كلمة واحدة فقط (مثل كلمة "Hello") واضغط الاختصار.
+
+    إذا اشتغل: ابدأ بتجربة جمل أطول.
+
+    إذا أعطاك رسالة "رد غير متوقع": انسخ الكلام الذي سيظهر في النافذة وضعه لي هنا، وسأعرف فوراً ما هو الحرف أو الإعداد الذي يرفضه Ollama.
+
+ملاحظة: موديل translategemma هو موديل تخصصي (Gemma مع ضبط للترجمة)، أحياناً يكون حساساً جداً للـ Prompt. إذا استمرت المشكلة، يمكننا تجربة الموديل العام qwen3.6:35b الذي تملكه وهو أقوى بمراحل.
+User 3:17 AM
+code
+Code
+
+zenity --error --text="الموديل لم يرسل ترجمة. \nالسبب المحتمل: $ERR_DETAIL"
+
+Model 3:17 AM
+Thinking Thoughts
+
+Expand to view model thoughts
+chevron_right
+
+بما أن رسالة الخطأ تظهر لك "null" حتى مع الكلمات البسيطة، فهذا يعني أن هناك مشكلة في تنسيق النص (JSON) الذي يُرسل إلى Ollama. عندما نرسل نصاً يدوياً عبر curl في Bash، أي علامة تنصيص أو سطر جديد داخل النص تجعل Ollama يرفض الطلب تماماً ويعيد رداً فارغاً.
+
+إليك النسخة "المضادة للرصاص" (Bulletproof). لقد قمت بتغيير طريقة بناء الطلب بالكامل لتعتمد على jq بشكل احترافي لتغليف النص، مما يضمن عدم حدوث خطأ "null" مرة أخرى.
+الكود الجديد (استخدم هذا وامسح القديم تماماً):
+code Bash
+
+#!/bin/bash
+
+# 1. الإعدادات
+MODEL="translategemma:12b"
+
+# 2. جلب النص المظلل (دعم كامل لـ Wayland و X11)
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    TEXT=$(wl-paste --primary 2>/dev/null || wl-paste)
+else
+    TEXT=$(xclip -o)
+fi
+
+# إذا كان النص فارغاً
+if [ -z "$TEXT" ]; then
+    notify-send "Ollama" "لم يتم تظليل أي نص!"
+    exit 1
+fi
+
+# 3. بناء الطلب بصيغة JSON صحيحة 100% باستخدام jq
+# هذه الطريقة تعالج علامات التنصيص والرموز الغريبة تلقائياً
+PAYLOAD=$(jq -n \
+    --arg md "$MODEL" \
+    --arg pr "Translate the following text to Arabic. Output only the translation. \n\nText: $TEXT" \
+    '{model: $md, prompt: $pr, stream: false, options: {temperature: 0.2}}')
+
+# 4. إرسال الطلب وحفظ الرد الكامل في متغير
+RESPONSE_RAW=$(curl -s -X POST http://127.0.0.1:11434/api/generate -d "$PAYLOAD")
+
+# 5. استخراج الترجمة أو الخطأ
+TRANSLATION=$(echo "$RESPONSE_RAW" | jq -r '.response // empty')
+ERROR_MSG=$(echo "$RESPONSE_RAW" | jq -r '.error // empty')
+
+# 6. العرض النهائي
+if [ -n "$TRANSLATION" ]; then
+    # عرض الترجمة في نافذة
+    echo -e "الترجمة (بواسطة $MODEL):\n\n$TRANSLATION" | zenity --text-info --title="Ollama Translate" --width=700 --height=500 --font="Ubuntu 14"
+elif [ -n "$ERROR_MSG" ]; then
+    zenity --error --text="خطأ من Ollama: $ERROR_MSG"
+else
+    # إذا كان الرد فارغاً تماماً، نعرض الرد الخام للتشخيص
+    zenity --error --text="رد غير معروف. تأكد أن الموديل $MODEL محمل.\n\nالرد الخام: $RESPONSE_RAW"
+fi
+
+لماذا هذا الكود سيحل مشكلتك؟
+
+    JSON Safe: في المحاولات السابقة، كنا نضع $TEXT داخل علامات تنصيص يدوية، وهذا "ينفجر" برمجياً إذا كان النص يحتوي على أي رمز خاص. الآن jq -n --arg هو الذي يتولى تحويل النص إلى صيغة يفهمها السيرفر بأمان.
+
+    التشخيص الذكي: إذا لم تنجح الترجمة، السكربت سيخبرك الآن هل الخطأ من السيرفر (Ollama) أم أن الرد جاء فارغاً.
+
+    تبسيط الـ Prompt: جعلت الأوامر للموديل مباشرة جداً لضمان أسرع استجابة.
+
+خطوات أخيرة للتأكد من كل شيء:
+
+    تأكد من اسم الموديل: في الـ Terminal، نفذ ollama list وتأكد أن الاسم هو translategemma:12b بالضبط.
+
+    تأكد من وجود الأدوات:
+    code Bash
+
+    sudo apt install jq curl zenity wl-clipboard xclip
+
+    تجربة يدوية: بعد حفظ السكربت، ظلل كلمة "Desktop" مثلاً، ثم افتح الـ Terminal واكتب:
+    code Bash
+
+    bash ~/ollama_translate.sh
+
+    إذا ظهرت نافذة فيها كلمة "سطح المكتب"، فالاختصار سيعمل معك فوراً.
+
+ملاحظة لمستخدمي RTX 5060 Ti:
+بما أن كارت الشاشة لديك قوي جداً، إذا شعرت أن translategemma بطيء أو يعطي نتائج غير دقيقة، يمكنك تغيير السطر الأول في الكود إلى:
+MODEL="qwen3.6:35b"
+هذا الموديل (Qwen) الذي تملكه أنت بالفعل، يعتبر من أقوى الموديلات في العالم للترجمة حالياً، وسيعمل بسرعة البرق على كارت 16 جيجا.
+info
+Google AI models may make mistakes, so double-check outputs.
+warning
+
+Turn Drive on for future conversations
+Your work is currently not being saved and will be lost, we recommend enabling Google Drive, you will always have the option to turn on Temporary chat for conversations you do not want to save to your chat history.
+Use Arrow Up and Arrow Down to select a turn, Enter to jump to it, and Escape to return to the chat.
+Response ready.
+
