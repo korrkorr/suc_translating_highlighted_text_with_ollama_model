@@ -1,6 +1,7 @@
 # suc_translating_highlighted_text_with_ollama_model
 free program for translating highlighted text with ollama model
 
+It works with any text that is highlighted in a browser, PDF reader, or text file.
 
 
 add script on home om ubuntu 24
